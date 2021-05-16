@@ -109,26 +109,6 @@ def choose_video(client, VidId,username):
 	db.update_recommendation(username,new_list)
 		
 
-def find_recommended_video(client, vid_id,username): #FUNCTION NEED TO BE CHANGED
-	global db
-
-	print (vid_id)
-
-	data = db.GetVideo(vid_id,username,False) #NEED TO CHANGE
-
-	try:
-		info = "{},{},{},{},{}".format(data[2],data[3],data[4],data[7],data[0]) #name,publisher,views,date,id
-		client.send(str(info).encode())
-
-		if client.recv(1024).decode() == 'Img': #sending the preview img
-			img = data[8]
-			send_packet_list(client,CreatePacketList(img))
-	except:
-		client.send(str('ERROR').encode())
-		return
-
-
-
 def recommend(username):
 	first = time.time()
 	global db
