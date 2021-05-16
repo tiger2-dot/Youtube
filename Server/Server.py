@@ -4,6 +4,7 @@ import sqlite3
 import json
 from datetime import date
 from Database import Database
+import time
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 HOST = socket.gethostname()
@@ -17,6 +18,7 @@ db = Database()
 print ('Connected to database succesfully...')
 
 videoCounter = db.GetCurrVideoId()
+videoCounter += 1
 
 def CreatePacketList(data):
 	AMOUNT_OF_DATA = 8186
@@ -81,6 +83,7 @@ def upload_video(client):
 
 def choose_video(client, VidId,username):
 	global db
+
 	try:
 		data = db.GetVideo(VidId,username) #format of (id,b'video',name,publisher, view,like,dislike,date,b'img')
 	except:
@@ -93,10 +96,23 @@ def choose_video(client, VidId,username):
 	if client.recv(16).decode() == 'video':
 		video = data[1]
 		send_packet_list(client,CreatePacketList(video))
+
+	#UPDATING THE RECOMMENDATION LIST
+	recommendation_list = recommend(username)
+
+
+	new_list = ""
+	for id in recommendation_list:
+		new_list += str(id)
+		new_list += ','
+
+	db.update_recommendation(username,new_list)
 		
- 
+
 def find_recommended_video(client, vid_id,username): #FUNCTION NEED TO BE CHANGED
 	global db
+
+	print (vid_id)
 
 	data = db.GetVideo(vid_id,username,False) #NEED TO CHANGE
 
@@ -110,6 +126,158 @@ def find_recommended_video(client, vid_id,username): #FUNCTION NEED TO BE CHANGE
 	except:
 		client.send(str('ERROR').encode())
 		return
+
+
+
+def recommend(username):
+	first = time.time()
+	global db
+
+	info = db.get_user_acts(username)
+
+	grades = {}
+
+	for i in info: # i = (id, action)
+		vid_id = i[0]
+		act = i[1]
+
+		if vid_id not in grades:
+			grades[vid_id] = 0
+
+		if act == 'Watched':
+			grades[vid_id] += 1
+		elif act == 'Like':
+			grades[vid_id] += 0.5
+		elif act == 'Dislike':
+			grades[vid_id] -= 0.5
+
+	grades = dict(sorted(grades.items(), key=lambda item: item[1])) #sort the dictionary by values
+
+	ids = list(grades.keys())#get the id's of all *watched* vids
+	ids.reverse()#now the most watched vids are first
+
+	good_tags = {}
+	bad_tags = {}
+	good_creators = {}
+	bad_creators = {}
+	neutral_tags = {}
+	neutral_creators = {}
+
+	for id in ids:
+		vid_grade = grades[id]
+
+		if vid_grade >= 1.5:
+			tag = db.get_tag(id)[0]
+			creator = db.get_user(id)[0]
+
+			if tag in good_tags:
+				good_tags[tag] += 1
+			else:
+				good_tags[tag] = 1
+
+			if creator in good_creators:
+				good_creators[creator] += 1
+			else:
+				good_creators[creator] = 1
+
+		elif vid_grade == 0.5:
+			tag = db.get_tag(id)[0]
+			creator = db.get_user(id)[0]
+
+			if tag in bad_tags:
+				bad_tags[tag] += 1
+			else:
+				bad_tags[tag] = 1
+
+			if creator in bad_creators:
+				bad_creators[creator] += 1
+			else:
+				bad_creators[creator] = 1
+
+		else:
+			tag = db.get_tag(id)[0]
+			creator = db.get_user(id)[0]
+
+			if tag in neutral_tags:
+				neutral_tags[tag] += 1
+			else:
+				neutral_tags[tag] = 1
+
+			if creator in neutral_creators:
+				neutral_creators[creator] += 1
+			else:
+				neutral_creators[creator] = 1
+	
+	all_ids = []
+	for tag in list(good_tags.keys()):
+		for creator in list(good_creators.keys()):
+			results = db.Get_id_by_tag_creator(tag,creator) #results: [(id,),(id,)]
+
+			for result in results:
+				curr_id = result[0]
+				all_ids.append(curr_id)
+
+	for tag in list(neutral_tags.keys()):
+		for creator in list(neutral_creators.keys()):
+			results = db.Get_id_by_tag_creator(tag,creator) #results: [(id,),(id,)]
+
+			for result in results:
+				curr_id = result[0]
+				if curr_id not in all_ids: #maybe id already exist in list from good creators/tags
+					all_ids.append(result[0])
+
+	for tag in list(bad_tags.keys()):
+		for creator in list(bad_creators.keys()):
+			results = db.Get_id_by_tag_creator(tag,creator) #results: [(id,),(id,)]
+
+			for result in results:
+				curr_id = result[0]
+				if curr_id not in all_ids: #maybe id already exist in list from good/neutral creators/tags
+					all_ids.append(result[0])
+
+	all_vids = db.get_all_vids()
+
+	for id in all_vids:
+		if id[0] not in all_ids:
+			all_ids.append(id[0])
+
+
+	print ('functime: {}'.format(time.time()-first))
+
+	return all_ids
+	
+
+
+def find_recommended_videos(client,vid_index,username):
+	global db
+
+	watch_list = db.get_watch_list(username).split(',')
+	
+	try:
+		curr_vid = watch_list[int(vid_index)]
+	except:
+		client.send(str('ERROR').encode())
+		return
+
+	data = db.GetVideo(curr_vid,username,False)
+
+	try:
+		info = "{},{},{},{},{}".format(data[2],data[3],data[4],data[7],data[0]) #name,publisher,views,date,id
+		client.send(str(info).encode())
+
+		if client.recv(1024).decode() == 'Img': #sending the preview img
+			img = data[8]
+			send_packet_list(client,CreatePacketList(img))
+	except:
+		client.send(str('ERROR').encode())
+		return
+
+
+	#check if user did some actions
+	#if not than the order is by views, the most views to the less views
+	#if user did actions than need to do something
+
+	#neither way, need to generate some list of vids and then just choose by id
 		
 
 def add_like(client,vidId,username):
@@ -117,10 +285,30 @@ def add_like(client,vidId,username):
 	is_added = db.Like(vidId,username)
 	client.send(str(is_added).encode())
 
+	#UPDATING THE RECOMMENDATION LIST
+	recommendation_list = recommend(username)
+
+	new_list = ""
+	for id in recommendation_list:
+		new_list += str(id)
+		new_list += ','
+
+	db.update_recommendation(username,new_list)
+
 def add_dislike(client,vidId,username):
 	global db
 	is_added = db.Dislike(vidId,username)
 	client.send(str(is_added).encode())
+
+	#UPDATING THE RECOMMENDATION LIST
+	recommendation_list = recommend(username)
+
+	new_list = ""
+	for id in recommendation_list:
+		new_list += str(id)
+		new_list += ','
+
+	db.update_recommendation(username,new_list)
 
 
 def check_users(client,username):
@@ -128,12 +316,35 @@ def check_users(client,username):
 
 	returnValue = db.is_user_exist(username) #TRUE OR FALSE
 
+	if returnValue == True:
+		is_rec_exist = db.check_rec_exist(username)
+
+		if is_rec_exist == False:
+			rec_list = recommend(username)
+			
+			new_rec_list = ""
+			for id in rec_list:
+				new_rec_list += str(id)
+				new_rec_list += ','
+
+			db.add_recommendation(username,new_rec_list)
+
 	client.send(str(returnValue).encode())
+
 
 def add_user(username,password):
 	global db
 
 	db.add_user([(db.get_users_curr_id()[0]+1,username,password)])
+
+	#CREATING A BAISC RECOMMENDATION LIST AND ADDING TO DATA BASE
+	rec_list = ""
+	vids = db.get_sorted_by_views_likes()
+	for vid in vids:
+		rec_list += str(vid[0])
+		rec_list += ','
+
+	db.add_recommendation(username,rec_list)
 
 	print (f'User {db.get_users_curr_id()[0]+1} was added to the database succesfully')
 
@@ -145,7 +356,6 @@ def get_liked_videos(client,index,username,dislikes = False):
 	try:
 		liked_video = db.get_liked_video(username,dislikes)[int(index)]
 	except:
-		print ('ERROR1')
 		client.send(str('ERROR').encode())
 		return
 
@@ -159,7 +369,6 @@ def get_liked_videos(client,index,username,dislikes = False):
 			img = video[8]
 			send_packet_list(client,CreatePacketList(img))
 	except:
-		print ('ERROR2')
 		client.send(str('ERROR').encode())
 		pass
 
@@ -208,6 +417,9 @@ def Client(client,addr):
 	while True:
 		data = client.recv(1024).decode().split(',') #recieveing data at the format of "COMMAND,{NUMBER OF VIDEO}/NOTHING IF NOT ASKED FOR VIDEO"
 
+		if 'SELECT' in data: #if string contains "SELECT" than this is a "SQL injection" try
+			break
+
 		if data[0] == 'disconnect':
 			break
 
@@ -218,7 +430,7 @@ def Client(client,addr):
 			choose_video(client, data[1],data[2])
 
 		elif data[0] == 'Recommended':
-			find_recommended_video(client,data[1],data[2])
+			find_recommended_videos(client,data[1],data[2])
 
 		elif data[0] == 'Like':
 			add_like(client,data[1],data[2])
