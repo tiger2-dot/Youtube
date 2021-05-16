@@ -7,8 +7,19 @@ class Database:
 		self.create_video_table()
 		self.create_user_table()
 		self.create_actions_table()
+		self.create_recommendation_table()
 		self.conn.commit()
 		self.conn.close()
+
+	def create_recommendation_table(self):
+		self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name = 'recommendations'")
+
+		tables = len(self.cursor.fetchall())
+
+		if tables == 0:
+			self.cursor.execute("""CREATE TABLE recommendations(
+				user text,
+				recommendation text) """)
 
 	def create_actions_table(self):
 		self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name = 'actions'")
@@ -68,19 +79,46 @@ class Database:
 		self.conn.close()
 
 	def add_action(self,user_id,vid_id,action): #action can only be : 'Like' 'Dislike' 'Watched'
-		self.cursor.executemany("INSERT INTO actions VALUES (?,?,?)",[(user_id,vid_id,action)])
+		self.cursor.executemany("INSERT INTO actions VALUES (?,?,?)",[(user_id,vid_id,action)]) 
 		self.conn.commit()
 
-	def is_actions_done(self,user_id,action,vid_id):
-		action = "'"+action+"'"
+	def add_recommendation(self,username,rec_list):
+		self.Connect()
+		self.cursor.executemany("INSERT INTO recommendations VALUES (?,?)",[(username,rec_list)]) #[1,0,1,2,5]
+		self.conn.commit()
+		self.conn.close()
 
-		self.cursor.execute(f"SELECT vid_id FROM actions WHERE action = {action} AND user_id = {user_id}")
+	def update_recommendation(self,username,new_rec):
+		self.Connect()
+
+		self.cursor.execute("UPDATE recommendations SET recommendation = ? WHERE user = ?",(new_rec,username))
+		self.conn.commit()
+		self.conn.close()
+
+	def is_actions_done(self,user_id,action,vid_id):
+		act = "'"+action+"'"
+
+		self.cursor.execute(f"SELECT vid_id FROM actions WHERE action = ? AND user_id = ?",(act,user_id))
 		values = self.cursor.fetchall()
 
 		for value in values:
 			if int(value[0]) == int(vid_id):
 				return True
 		return False
+
+	def check_rec_exist(self,username):
+		self.Connect()
+
+		self.cursor.execute("SELECT recommendation FROM recommendations WHERE user = ?",(username,))
+		results = self.cursor.fetchall()
+
+		self.conn.close()
+
+		if len(results) == 0:
+			return False
+
+		return True
+
 
 	def Like(self,vidId,username):
 		self.Connect()	
@@ -211,6 +249,15 @@ class Database:
 		self.conn.close()
 		return values
 
+	def get_sorted_by_views_likes(self):
+		self.Connect()
+
+		self.cursor.execute("SELECT vid_id FROM video ORDER BY (likee/view) DESC")
+		results = self.cursor.fetchall()
+
+		self.conn.close()
+		return results
+
 
 	def GetLike(self,vidId):
 		self.cursor.execute("SELECT likee FROM video WHERE vid_id == {}".format(vidId))
@@ -244,10 +291,48 @@ class Database:
 
 		return result
 
+	def get_user_acts(self,username):
+		self.Connect()
+
+		user_id = self.name_to_id(username)
+
+		self.cursor.execute("SELECT vid_id,action FROM actions WHERE user_id == {}".format(user_id))
+		results = self.cursor.fetchall()
+
+		self.conn.close()
+		return results
+
+	def Get_id_by_tag_creator(self,tag,creator):
+		self.Connect()
+
+		self.cursor.execute("SELECT vid_id FROM video WHERE publisher = ? AND tag = ?",(creator,tag,))
+		results = self.cursor.fetchall()
+
+		self.conn.close()
+		return results
+
+	def get_all_vids(self):
+		self.Connect()
+
+		self.cursor.execute("SELECT vid_id FROM video")
+		results = self.cursor.fetchall()
+
+		self.conn.close()
+		return results
+
+	def get_watch_list(self,username):
+		self.Connect()
+
+		self.cursor.execute("SELECT recommendation FROM recommendations WHERE user = ?",(username,))
+		results = self.cursor.fetchall()
+
+		self.conn.close()
+		return results[0][0]
+
 
 
 '''
 d = Database()
-a = d.get_watched_videos('user1')
+a = d.get_all_vids()
 print (a)
 '''
