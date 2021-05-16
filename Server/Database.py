@@ -328,11 +328,3 @@ class Database:
 
 		self.conn.close()
 		return results[0][0]
-
-
-
-'''
-d = Database()
-a = d.get_all_vids()
-print (a)
-'''
