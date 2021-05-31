@@ -217,7 +217,7 @@ class Database:
 		try:
 			return values[len(values)-1]
 		except:
-			return 0
+			return (0,)
 
 	def get_liked_video(self,username,dislikes = False): #return a list of video id
 		self.Connect()
@@ -328,3 +328,21 @@ class Database:
 
 		self.conn.close()
 		return results[0][0]
+
+	def get_creator_vids(self,creator):
+		self.Connect()
+
+		self.cursor.execute("SELECT vid_id FROM video WHERE publisher = ?",(creator,))
+		results = self.cursor.fetchall()
+
+		self.conn.close()
+		return results
+
+	def get_tagged_vids(self,tag):
+		self.Connect()
+
+		self.cursor.execute("SELECT vid_id FROM video WHERE tag = ?",(tag,))
+		results = self.cursor.fetchall()
+
+		self.conn.close()
+		return results
