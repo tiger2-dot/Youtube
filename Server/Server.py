@@ -1,13 +1,12 @@
 import socket
 import threading
-import sqlite3
 import json
 from datetime import date
 from Database import Database
 import time
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-HOST = socket.gethostname()
+HOST = socket.gethostname() #currently local
 PORT = 5520
 
 server.bind((HOST,PORT))
@@ -20,7 +19,7 @@ print ('Connected to database succesfully...')
 videoCounter = db.GetCurrVideoId()
 videoCounter += 1
 
-def CreatePacketList(data):
+def CreatePacketList(data): #type(data) = b''
 	AMOUNT_OF_DATA = 8186
 
 	numOfPackets = int(len(data)/AMOUNT_OF_DATA) 
@@ -65,50 +64,6 @@ def send_packet_list(client,packet_list):
 		client.recv(16)
 
 
-def upload_video(client):
-	global db
-	global videoCounter
-
-	client.send(str('ready').encode())
-	data = client.recv(1024).decode().split(',') #expect to recieve: "name,publisher,tag"
-	name,publisher,tag = data[0],data[1],data[2]
-	client.send(str('sendVideo').encode())
-	video = RecieveData(client)
-	client.send(str('sendImg').encode())
-	img = RecieveData(client)
-	db.add_video([(videoCounter,video,name,publisher,0,0,0,date.today(),img,tag)]) #DEFYING VIEW,LIKE AND DISLIKE AS 0, DATE AS UPLOAD TIME
-	print ('Succesfully added video to database with id: {}'.format(videoCounter))
-	videoCounter += 1
-
-
-def choose_video(client, VidId,username):
-	global db
-
-	try:
-		data = db.GetVideo(VidId,username) #format of (id,b'video',name,publisher, view,like,dislike,date,b'img')
-	except:
-		client.send('ERROR'.encode())
-		return
-
-	generalInfo = "{},{},{},{},{},{}".format(data[2],data[3],data[4],data[5],data[6],data[7],) #name,publisher,view,like,dislike,date
-	client.send(str(generalInfo).encode())
-
-	if client.recv(16).decode() == 'video':
-		video = data[1]
-		send_packet_list(client,CreatePacketList(video))
-
-	#UPDATING THE RECOMMENDATION LIST
-	recommendation_list = recommend(username)
-
-
-	new_list = ""
-	for id in recommendation_list:
-		new_list += str(id)
-		new_list += ','
-
-	db.update_recommendation(username,new_list)
-		
-
 def recommend(username):
 	first = time.time()
 	global db
@@ -134,7 +89,7 @@ def recommend(username):
 	grades = dict(sorted(grades.items(), key=lambda item: item[1])) #sort the dictionary by values
 
 	ids = list(grades.keys())#get the id's of all *watched* vids
-	ids.reverse()#now the most watched vids are first
+	ids.reverse()#now the best graded vids are first
 
 	good_tags = {}
 	bad_tags = {}
@@ -197,6 +152,21 @@ def recommend(username):
 				curr_id = result[0]
 				all_ids.append(curr_id)
 
+	for creator in list(good_creators.keys()):
+		results = db.get_creator_vids(creator)
+		for id in results:
+			id = id[0]
+			if id not in all_ids:
+				all_ids.append(id)
+
+	for tag in list(good_tags.keys()):
+		results = db.get_tagged_vids(tag)
+
+		for id in results:
+			id = id[0]
+			if id not in all_ids:
+				all_ids.append(id)
+
 	for tag in list(neutral_tags.keys()):
 		for creator in list(neutral_creators.keys()):
 			results = db.Get_id_by_tag_creator(tag,creator) #results: [(id,),(id,)]
@@ -225,8 +195,57 @@ def recommend(username):
 	print ('functime: {}'.format(time.time()-first))
 
 	return all_ids
-	
 
+
+def update_rec(username):
+	global db
+
+	recommendation_list = recommend(username)
+
+	new_list = ""
+	for id in recommendation_list:
+		new_list += str(id)
+		new_list += ','
+
+	db.update_recommendation(username,new_list)
+
+def upload_video(client):
+	global db
+	global videoCounter
+
+	client.send(str('ready').encode())
+	data = client.recv(1024).decode().split(',') #expect to recieve: "name,publisher,tag"
+	name,publisher,tag = data[0],data[1],data[2]
+	client.send(str('sendVideo').encode())
+	video = RecieveData(client)
+	client.send(str('sendImg').encode())
+	img = RecieveData(client)
+	db.add_video([(videoCounter,video,name,publisher,0,0,0,date.today(),img,tag)]) #DEFYING VIEW,LIKE AND DISLIKE AS 0, DATE AS UPLOAD TIME
+	print ('Succesfully added video to database with id: {}'.format(videoCounter))
+	videoCounter += 1
+
+	update_rec(publisher)
+
+
+def choose_video(client, VidId,username):
+	global db
+
+	try:
+		data = db.GetVideo(VidId,username) #format of (id,b'video',name,publisher, view,like,dislike,date,b'img')
+	except:
+		client.send('ERROR'.encode())
+		return
+
+	generalInfo = "{},{},{},{},{},{}".format(data[2],data[3],data[4],data[5],data[6],data[7],) #name,publisher,view,like,dislike,date
+	client.send(str(generalInfo).encode())
+
+	if client.recv(16).decode() == 'video':
+		video = data[1]
+		send_packet_list(client,CreatePacketList(video))
+
+
+	update_rec(username)
+	
 
 def find_recommended_videos(client,vid_index,username):
 	global db
@@ -266,14 +285,8 @@ def add_like(client,vidId,username):
 	client.send(str(is_added).encode())
 
 	#UPDATING THE RECOMMENDATION LIST
-	recommendation_list = recommend(username)
+	update_rec(username)
 
-	new_list = ""
-	for id in recommendation_list:
-		new_list += str(id)
-		new_list += ','
-
-	db.update_recommendation(username,new_list)
 
 def add_dislike(client,vidId,username):
 	global db
@@ -281,14 +294,7 @@ def add_dislike(client,vidId,username):
 	client.send(str(is_added).encode())
 
 	#UPDATING THE RECOMMENDATION LIST
-	recommendation_list = recommend(username)
-
-	new_list = ""
-	for id in recommendation_list:
-		new_list += str(id)
-		new_list += ','
-
-	db.update_recommendation(username,new_list)
+	update_rec(username)
 
 
 def check_users(client,username):
@@ -298,7 +304,7 @@ def check_users(client,username):
 
 	if returnValue == True:
 		is_rec_exist = db.check_rec_exist(username)
-
+		print (is_rec_exist)
 		if is_rec_exist == False:
 			rec_list = recommend(username)
 			
@@ -308,6 +314,8 @@ def check_users(client,username):
 				new_rec_list += ','
 
 			db.add_recommendation(username,new_rec_list)
+	else:
+		update_rec(username)
 
 	client.send(str(returnValue).encode())
 
@@ -395,7 +403,7 @@ def get_creators_views(client,username):
 
 def Client(client,addr):
 	while True:
-		data = client.recv(1024).decode().split(',') #recieveing data at the format of "COMMAND,{NUMBER OF VIDEO}/NOTHING IF NOT ASKED FOR VIDEO"
+		data = client.recv(1024).decode().split(',') #recieveing data at the format of "COMMAND,ADDITIONAL DATA"
 
 		if 'SELECT' in data: #if string contains "SELECT" than this is a "SQL injection" try
 			break
@@ -440,9 +448,7 @@ def Client(client,addr):
 	client.close()
 
 
-def main():
-	global server
-
+def main(server):
 	while True:
 
 		client, addr = server.accept()
@@ -452,4 +458,4 @@ def main():
 		thread.start()
 
 
-main()
+main(server)
