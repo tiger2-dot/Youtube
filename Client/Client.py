@@ -4,7 +4,6 @@ import json
 class Network:
 	def __init__(self):
 		self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #TCP
-		#self.HOST = '10.100.102.2' 
 		self.HOST = socket.gethostname()
 		self.PORT = 5520
 		self.Connect()
