@@ -314,8 +314,6 @@ def check_users(client,username):
 				new_rec_list += ','
 
 			db.add_recommendation(username,new_rec_list)
-	else:
-		update_rec(username)
 
 	client.send(str(returnValue).encode())
 
