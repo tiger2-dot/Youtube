@@ -187,7 +187,6 @@ class Database:
 		try:
 			self.cursor.execute(f"SELECT * FROM video WHERE vid_id == {vidId}")
 		except:
-			print ('DATABASE ERROR')
 			return 'ERROR'
 
 		returnValue = self.cursor.fetchone()
