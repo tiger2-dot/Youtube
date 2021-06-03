@@ -304,7 +304,6 @@ def check_users(client,username):
 
 	if returnValue == True:
 		is_rec_exist = db.check_rec_exist(username)
-		print (is_rec_exist)
 		if is_rec_exist == False:
 			rec_list = recommend(username)
 			
