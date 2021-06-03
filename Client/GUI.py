@@ -224,13 +224,6 @@ class MainGUI(QMainWindow):
 		liked.setIcon(QIcon('imgs/like.png'))
 		liked.setIconSize(QtCore.QSize(50,50))
 
-		about = QtWidgets.QPushButton(self)
-		about.setText("About The Creator")
-		about.clicked.connect(lambda: self.ClickSideButt('about'))
-		about.setGeometry(1600,650,220,50)
-		about.setFont(QFont("Times",12, weight = QtGui.QFont.Bold))
-		about.setStyleSheet("background-color : white")
-
 		logout = QtWidgets.QPushButton(self)
 		logout.setText('Log out')
 		logout.setGeometry(1600,800,220,50)
@@ -434,8 +427,6 @@ class MoreGUI(QWidget):
 
 		if self.func[0] == "upload":
 			self.Upload()
-		elif self.func[0] == 'about':
-			self.About()
 		elif self.func[0] == 'liked':
 			self.Like()
 		elif self.func[0] == 'disliked':
@@ -680,14 +671,6 @@ class MoreGUI(QWidget):
 		except:
 			return
 		self.vidData = file.read()
-	
-	def About(self):
-		background = QLabel(self)
-		background.move(0,0)
-		background.resize(1600,920)
-		background.setStyleSheet("border-image : url(imgs/back2.png);")
-
-		# NEED TO ADD EVERYTHING 
 
 	def Like(self,disliked = False):
 		background = QLabel(self)
@@ -716,7 +699,6 @@ class MoreGUI(QWidget):
 				videoCounter += 1
 
 				if data == 'ERROR':
-					print ('ERROR')
 					break
 
 				name,publisher,views,date,vidId,img = data[0],data[1],data[2],data[3],data[4],data[5]
@@ -837,13 +819,6 @@ class MoreGUI(QWidget):
 		liked.setStyleSheet("background-color : white") 
 		liked.setIcon(QIcon('imgs/like.png'))
 		liked.setIconSize(QtCore.QSize(50,50))
-
-		about = QtWidgets.QPushButton(self)
-		about.setText("About The Creator")
-		about.clicked.connect(lambda: self.ClickSideButt('about'))
-		about.setGeometry(1600,650,220,50)
-		about.setFont(QFont("Times",12, weight = QtGui.QFont.Bold))
-		about.setStyleSheet("background-color : white")
 
 		logout = QtWidgets.QPushButton(self)
 		logout.setText('Log out')
